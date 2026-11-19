@@ -30,8 +30,15 @@ jobs:
           if [ "$attente" -gt 0 ]; then echo "J'attends $(( attente / 60 )) minutes."; sleep "$attente"; else echo "L'heure est passée : je déclenche tout de suite."; fi
       - name: Déclencher le briefing
         env:
-          GH_TOKEN: ${{ secrets.REVEIL_TOKEN }}
-        run: gh workflow run briefing.yml --repo adjaoudicherif86-glitch/hyper-pc
+          JETON: ${{ secrets.REVEIL_TOKEN }}
+        # appel direct à GitHub : la clé n'a que le droit de déclencher les workflows de hyper-pc
+        run: |
+          code=$(curl -s -o reponse.txt -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer $JETON" -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/adjaoudicherif86-glitch/hyper-pc/actions/workflows/briefing.yml/dispatches \
+            -d '{"ref":"main"}')
+          echo "Réponse de GitHub : $code (204 = briefing déclenché)"
+          [ "$code" = "204" ] || { cat reponse.txt; exit 1; }
       - name: Signe de vie mensuel (GitHub coupe les tâches programmées d'un dépôt public inactif depuis 60 jours)
         if: ${{ github.event_name == 'schedule' }}
         run: |
