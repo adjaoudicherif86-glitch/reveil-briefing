@@ -1,0 +1,42 @@
+# Réveil du briefing du matin (dépôt PUBLIC : minutes GitHub gratuites, aucune donnée personnelle ici).
+# Le planificateur de GitHub prend souvent plusieurs heures de retard : ce réveil démarre donc très tôt,
+# attend sur place jusqu'à l'heure pile (8 h en semaine, 10 h le week-end, heure de Paris),
+# puis déclenche le briefing du dépôt privé, ce qui est immédiat.
+name: Réveil
+
+on:
+  schedule:
+    - cron: "17 1 * * 1-5"         # semaine : départ vers 2-3 h de Paris
+    - cron: "47 4 * * 1-5"         # semaine : réveil de secours
+    - cron: "47 3 * * 0,6"         # week-end
+    - cron: "17 6 * * 0,6"         # week-end : réveil de secours
+  workflow_dispatch:
+
+permissions:
+  contents: write                  # seulement pour le petit signe de vie mensuel (voir plus bas)
+
+jobs:
+  reveil:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - name: Attendre l'heure du briefing
+        run: |
+          jour=$(TZ=Europe/Paris date +%u)                       # 1 = lundi ... 7 = dimanche
+          if [ "$jour" -ge 6 ]; then heure="10:00"; else heure="08:00"; fi
+          cible=$(TZ=Europe/Paris date -d "today $heure" +%s)
+          attente=$(( cible - $(date +%s) ))
+          echo "Briefing prévu à $heure (heure de Paris)."
+          if [ "$attente" -gt 0 ]; then echo "J'attends $(( attente / 60 )) minutes."; sleep "$attente"; else echo "L'heure est passée : je déclenche tout de suite."; fi
+      - name: Déclencher le briefing
+        env:
+          GH_TOKEN: ${{ secrets.REVEIL_TOKEN }}
+        run: gh workflow run briefing.yml --repo adjaoudicherif86-glitch/hyper-pc
+      - name: Signe de vie mensuel (GitHub coupe les tâches programmées d'un dépôt public inactif depuis 60 jours)
+        if: ${{ github.event_name == 'schedule' }}
+        run: |
+          if [ "$(date +%d)" = "01" ]; then
+            git clone -q "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" depot
+            cd depot && date -u +%Y-%m-%d > vivant.txt && git add vivant.txt
+            git -c user.name=reveil -c user.email=reveil@users.noreply.github.com commit -q -m "Signe de vie" && git push -q || true
+          fi
